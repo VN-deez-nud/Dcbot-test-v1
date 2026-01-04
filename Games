@@ -1,0 +1,149 @@
+const { Client, GatewayIntentBits } = require("discord.js");
+const express = require("express");
+
+// Tạo client Discord
+const client = new Client({
+  intents: [
+    GatewayIntentBits.Guilds,
+    GatewayIntentBits.GuildMessages,
+    GatewayIntentBits.MessageContent
+  ]
+});
+
+// Lưu tiền người chơi (reset khi restart)
+const balances = {};
+
+// Server giữ bot sống (Render + UptimeRobot)
+const app = express();
+app.get("/", (req, res) => res.send("Bot đang hoạt động"));
+app.listen(process.env.PORT || 3000);
+
+// Khi bot online
+client.once("ready", () => {
+  console.log(`Bot đăng nhập với tên ${client.user.tag}`);
+});
+
+// Nhận tin nhắn
+client.on("messageCreate", async (message) => {
+  if (message.author.bot) return;
+
+  const args = message.content.split(" ");
+  const command = args[0].toLowerCase();
+
+  // Nếu chưa có tiền thì cho 1000
+  balances[message.author.id] ??= 1000;
+
+  // 💰 XEM TIỀN
+  if (command === "!balance") {
+    return message.reply(`💰 Số dư của bạn: **${balances[message.author.id]} coin**`);
+  }
+
+  // 🎲 DICE – ĐOÁN SỐ
+  // !dice <tiền cược> <1-6>
+  if (command === "!dice") {
+    const bet = parseInt(args[1]);
+    const guess = parseInt(args[2]);
+
+    if (!bet || bet <= 0)
+      return message.reply("❌ Tiền cược không hợp lệ.");
+
+    if (!guess || guess < 1 || guess > 6)
+      return message.reply("❌ Hãy chọn số từ **1 đến 6**.");
+
+    if (bet > balances[message.author.id])
+      return message.reply("❌ Bạn không đủ tiền.");
+
+    const roll = Math.floor(Math.random() * 6) + 1;
+
+    if (guess === roll) {
+      balances[message.author.id] += bet * 5;
+      message.reply(`🎲 Ra số **${roll}** — 🎉 BẠN THẮNG!\n+${bet * 5} coin`);
+    } else {
+      balances[message.author.id] -= bet;
+      message.reply(`🎲 Ra số **${roll}** — 💀 BẠN THUA!\n-${bet} coin`);
+    }
+  }
+
+  // 🪙 COIN FLIP
+  // !cf <tiền cược> heads/tails
+  if (command === "!cf") {
+    const bet = parseInt(args[1]);
+    const choice = args[2]?.toLowerCase();
+
+    if (!bet || bet <= 0)
+      return message.reply("❌ Tiền cược không hợp lệ.");
+
+    if (!["heads", "tails"].includes(choice))
+      return message.reply("❌ Chọn **heads** hoặc **tails**.");
+
+    if (bet > balances[message.author.id])
+      return message.reply("❌ Bạn không đủ tiền.");
+
+    const flip = Math.random() < 0.5 ? "heads" : "tails";
+
+    if (choice === flip) {
+      balances[message.author.id] += bet;
+      message.reply(`🪙 Kết quả: **${flip}** — 🎉 BẠN THẮNG!`);
+    } else {
+      balances[message.author.id] -= bet;
+      message.reply(`🪙 Kết quả: **${flip}** — 💀 BẠN THUA!`);
+    }
+  }
+
+  // 🃏 BLACKJACK (tự động)
+  // !blackjack <tiền cược>
+  if (command === "!blackjack") {
+    const bet = parseInt(args[1]);
+
+    if (!bet || bet <= 0)
+      return message.reply("❌ Tiền cược không hợp lệ.");
+
+    if (bet > balances[message.author.id])
+      return message.reply("❌ Bạn không đủ tiền.");
+
+    const draw = () => Math.floor(Math.random() * 10) + 1;
+
+    const player = draw() + draw();
+    const dealer = draw() + draw();
+
+    if (player > 21 || (dealer <= 21 && dealer >= player)) {
+      balances[message.author.id] -= bet;
+      message.reply(
+        `🃏 **BLACKJACK**\nBạn: ${player}\nNhà cái: ${dealer}\n💀 BẠN THUA`
+      );
+    } else {
+      balances[message.author.id] += bet;
+      message.reply(
+        `🃏 **BLACKJACK**\nBạn: ${player}\nNhà cái: ${dealer}\n🎉 BẠN THẮNG`
+      );
+    }
+  }
+
+  // ❌⭕ TIC TAC TOE (đánh với bot)
+  // !tictac <tiền cược>
+  if (command === "!tictac") {
+    const bet = parseInt(args[1]);
+
+    if (!bet || bet <= 0)
+      return message.reply("❌ Tiền cược không hợp lệ.");
+
+    if (bet > balances[message.author.id])
+      return message.reply("❌ Bạn không đủ tiền.");
+
+    const results = ["win", "lose", "draw"];
+    const result = results[Math.floor(Math.random() * results.length)];
+
+    if (result === "win") {
+      balances[message.author.id] += bet;
+      message.reply("❌⭕ BẠN THẮNG TicTacToe!");
+    } else if (result === "lose") {
+      balances[message.author.id] -= bet;
+      message.reply("❌⭕ BẠN THUA TicTacToe!");
+    } else {
+      message.reply("❌⭕ HÒA — không mất tiền.");
+    }
+  }
+});
+
+// Đăng nhập bot
+client.login(process.env.TOKEN);
